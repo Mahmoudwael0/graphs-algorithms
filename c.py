@@ -1,11 +1,10 @@
 import pygame
 import math
-import random
 
 WIDTH = 800
 ROWS = 40
 WIN = pygame.display.set_mode((WIDTH, WIDTH))
-pygame.display.set_caption("Smart Mass-Based Graph Visualizer")
+pygame.display.set_caption("Smart Mass-Based Graph Visualizer & Dev Tools")
 
 WHITE = (255, 255, 255)
 BLACK = (0, 0, 0)
@@ -180,11 +179,25 @@ def execute_path_search(grid, target_nodes, mode):
                         
     return graph_data
 
-def add_random_noise(grid):
-    for row in grid:
-        for n in row:
-            if n.color == WHITE and random.random() < 0.15: 
-                n.color = BLACK
+def get_dev_matrix(graph_data, target_nodes):
+    n = len(target_nodes)
+    node_to_idx = {node: i for i, node in enumerate(target_nodes)}
+    matrix = [[[] for _ in range(n)] for _ in range(n)]
+    
+    for (n1, n2), distances in graph_data.items():
+        idx1 = node_to_idx[n1]
+        idx2 = node_to_idx[n2]
+        
+        matrix[idx1][idx2].extend(distances)
+        matrix[idx2][idx1].extend(distances)
+        
+    print("\n==Dev Adjacency Matrix==")
+    print("-" * 34)
+    for i, row in enumerate(matrix):
+        print(f"Node {i}: {row}")
+    print("===================================\n")
+        
+    return matrix, node_to_idx
 
 def main():
     pygame.init()
@@ -210,12 +223,15 @@ def main():
                     target_nodes = []
                     graph_data = {}
                     mode = "grid"
-                    
-                if event.key == pygame.K_r:
-                    add_random_noise(grid)
 
                 if event.key == pygame.K_SPACE and mode == "grid":
                     graph_data = execute_path_search(grid, target_nodes, mode)
+                    
+                if event.key == pygame.K_d:
+                    if graph_data:
+                        dev_matrix, mapping = get_dev_matrix(graph_data, target_nodes)
+                    else:
+                        print("\n[!] Please press SPACE first to calculate paths before getting the Dev Matrix.\n")
 
         if mode == "grid":
             handle_mouse_clicks(grid, target_nodes)
