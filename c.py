@@ -5,7 +5,7 @@ import random
 WIDTH = 800
 ROWS = 40
 WIN = pygame.display.set_mode((WIDTH, WIDTH))
-pygame.display.set_caption("Multi-Path Curved Graph Visualizer")
+pygame.display.set_caption("Smart Mass-Based Graph Visualizer")
 
 WHITE = (255, 255, 255)
 BLACK = (0, 0, 0)
@@ -31,54 +31,6 @@ class Node:
 
 def initialize_grid():
     return [[Node(i, j, WIDTH//ROWS) for j in range(ROWS)] for i in range(ROWS)]
-
-def get_valid_neighbors(r, c, visited):
-    neighbors = []
-    for dr, dc in [(1,0), (-1,0), (0,1), (0,-1)]:
-        nr, nc = r + dr, c + dc
-        if 0 <= nr < ROWS and 0 <= nc < ROWS and (nr, nc) not in visited:
-            neighbors.append((nr, nc))
-    return neighbors
-
-def clean_temporary_search_colors(grid, temp_colored):
-    for r, c in temp_colored:
-        if grid[r][c].color == YELLOW:
-            grid[r][c].color = BLACK
-
-def find_all_paths_from_node(draw_func, grid, start_node, target_nodes):
-    stack = [(start_node.r, start_node.c, 0, {(start_node.r, start_node.c)})]
-    found_paths = []
-    temp_colored = set()
-    
-    while stack:
-        pygame.event.pump()
-        r, c, dist, visited = stack.pop()
-        
-        is_target = False
-        for t in target_nodes:
-            if t != start_node and t.r == r and t.c == c:
-                found_paths.append((t, dist))
-                is_target = True
-                break
-        
-        if is_target:
-            continue
-            
-        for nr, nc in get_valid_neighbors(r, c, visited):
-            neighbor = grid[nr][nc]
-            if neighbor.color == BLACK or neighbor in target_nodes:
-                new_visited = set(visited)
-                new_visited.add((nr, nc))
-                stack.append((nr, nc, dist + 1, new_visited))
-                
-                if neighbor.color == BLACK:
-                    neighbor.color = YELLOW
-                    temp_colored.add((nr, nc))
-        draw_func()
-        
-    clean_temporary_search_colors(grid, temp_colored)
-    draw_func()
-    return found_paths
 
 def render_distance_label(win, dist, pos, font):
     label = font.render(str(dist), True, RED)
@@ -173,27 +125,60 @@ def handle_mouse_clicks(grid, target_nodes):
         elif m_p[2] and node.color == WHITE:
             node.color = BLACK
 
-def group_raw_paths_into_graph_data(raw_paths):
-    graph_data = {}
-    for s, e, d in raw_paths:
-        if (s, e) not in graph_data:
-            graph_data[(s, e)] = []
-        graph_data[(s, e)].append(d)
-    return graph_data
-
 def execute_path_search(grid, target_nodes, mode):
-    raw_paths = set()
+    graph_data = {}
+    visited_black_squares = set()
     draw_callback = lambda: render_screen(WIN, grid, mode, {}, target_nodes)
     
-    for start_node in target_nodes:
-        paths = find_all_paths_from_node(draw_callback, grid, start_node, target_nodes)
-        for end_node, dist in paths:
-            if id(start_node) < id(end_node):
-                raw_paths.add((start_node, end_node, dist))
-            else:
-                raw_paths.add((end_node, start_node, dist))
+    for r in range(ROWS):
+        for c in range(ROWS):
+            if grid[r][c].color == BLACK and (r, c) not in visited_black_squares:
+                wire_squares = []
+                touched_nodes = set()
                 
-    return group_raw_paths_into_graph_data(raw_paths)
+                queue = [(r, c)]
+                visited_black_squares.add((r, c))
+                grid[r][c].color = YELLOW
+                draw_callback()
+                
+                while queue:
+                    pygame.event.pump()
+                    curr_r, curr_c = queue.pop(0)
+                    wire_squares.append((curr_r, curr_c))
+                    
+                    for dr, dc in [(1,0), (-1,0), (0,1), (0,-1)]:
+                        nr, nc = curr_r + dr, curr_c + dc
+                        if 0 <= nr < ROWS and 0 <= nc < ROWS:
+                            neighbor = grid[nr][nc]
+                            if neighbor.color == BLACK and (nr, nc) not in visited_black_squares:
+                                visited_black_squares.add((nr, nc))
+                                queue.append((nr, nc))
+                                neighbor.color = YELLOW
+                                draw_callback()
+                            elif neighbor in target_nodes:
+                                touched_nodes.add(neighbor)
+                                
+                for wr, wc in wire_squares:
+                    grid[wr][wc].color = BLACK
+                draw_callback()
+                
+                wire_length = len(wire_squares)
+                
+                touched_list = list(touched_nodes)
+                for i in range(len(touched_list)):
+                    for j in range(i + 1, len(touched_list)):
+                        n1 = touched_list[i]
+                        n2 = touched_list[j]
+                        
+                        if id(n1) > id(n2):
+                            n1, n2 = n2, n1
+                            
+                        pair = (n1, n2)
+                        if pair not in graph_data:
+                            graph_data[pair] = []
+                        graph_data[pair].append(wire_length)
+                        
+    return graph_data
 
 def add_random_noise(grid):
     for row in grid:
